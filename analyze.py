@@ -1,4 +1,6 @@
 import re
+import glob
+import gzip
 import sys
 import subprocess
 from collections import Counter
@@ -20,8 +22,12 @@ def get_keycode_map():
 
 def parse_events(filename):
     REGEX = re.compile(r'EVENT.*?(?=^EVENT)', re.DOTALL | re.M)
-    with open(filename) as f:
-        text = f.read()
+    if filename.endswith('.gz'):
+        with gzip.open(filename, 'rt') as f:
+            text = f.read()
+    else:
+        with open(filename) as f:
+            text = f.read()
     for mtch in re.finditer(REGEX, text):
         yield mtch.group(0)
 
@@ -51,20 +57,33 @@ def batch_events(events):
         if event_name == 'KeyPress':
             unmatched.add(key_code)
             batch.append(mapping)
-        elif event_name == 'KeyRelease':
+        elif event_name == 'KeyRelease' and len(batch) > 0:
+            if key_code not in unmatched:
+                print('***')
+                print(unmatched, batch)
             unmatched.remove(key_code)
 
         if len(unmatched) == 0 and len(batch) > 0:
             yield tuple(batch)
             batch = []
 
-if __name__ == "__main__":
-    filename_ = sys.argv[1]
+def count_events(directory_name, keycode_mappings):
+    counter = Counter()
+    filenames = glob.glob(f'{directory_name}/*events.gz')
+    # print(filenames)
+    for filename in filenames:
+        events = get_events(filename, keycode_mappings_)
+        try:
+            counter += Counter(batch_events(events))
+        except:
+            print(f'Error in {filename}')
+    return counter
 
+if __name__ == "__main__":
+    directory_name_ = sys.argv[1]
     keycode_mappings_ = get_keycode_map()
 
-    events_ = get_events(filename_, keycode_mappings_)
-    counter = Counter(batch_events(events_))
+    counter_ = count_events(directory_name_, keycode_mappings_)
 
-    for ev in counter.most_common(50):
+    for ev in counter_.most_common(50):
         print(*ev)
